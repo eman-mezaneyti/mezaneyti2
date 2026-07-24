@@ -168,6 +168,12 @@ button, input, select {
   box-shadow: var(--shadow);
 }
 .stat-card:active { background: var(--teal-tint); }
+.stat-card.disabled-card {
+  opacity: 0.55;
+}
+.stat-card.disabled-card .stat-value {
+  color: var(--ink-soft);
+}
 .stat-icon { font-size: 20px; }
 .stat-label {
   font-size: 12.5px;
