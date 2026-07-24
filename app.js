@@ -37,6 +37,8 @@ const DEFAULT_DATA = {
     { name: 'جمعيات', amount: 0 },
   ],
   transactions: [],
+  // إعدادات كل شهر (دخل + التزامات) بشكل مستقل، مفتاحها "YYYY-MM"
+  monthSettings: {},
 };
 
 // ---------- تحميل / حفظ البيانات ----------
@@ -52,6 +54,14 @@ function loadData() {
     // تأكيد إن الشكل سليم قبل الاعتماد عليه
     if (!parsed || !parsed.income || !Array.isArray(parsed.commitments) || !Array.isArray(parsed.transactions)) {
       return cloneDefaults();
+    }
+    // ترحيل البيانات القديمة (قبل ميزة استقلالية كل شهر) لأول مرة
+    if (!parsed.monthSettings || typeof parsed.monthSettings !== 'object') {
+      const now = new Date();
+      const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      parsed.monthSettings = {
+        [currentKey]: { income: parsed.income, commitments: parsed.commitments },
+      };
     }
     return parsed;
   } catch (e) {
@@ -97,18 +107,33 @@ function getMonthTx(monthKey) {
   return state.transactions.filter(t => t.date.slice(0, 7) === monthKey);
 }
 
+// إعدادات الدخل/الالتزامات الخاصة بشهر معيّن.
+// لو الشهر ده معملوش له تعديل صريح، بترجع آخر إعدادات محفوظة لأقرب شهر سابق (استمرارية طبيعية)،
+// وأي تعديل لاحق على شهر معيّن بيفضل خاص بيه لوحده ومبيأثرش على الشهور اللي ليها إعداداتها الخاصة بالفعل.
+function getSettingsForMonth(monthKey) {
+  const keys = Object.keys(state.monthSettings).sort();
+  let chosen = null;
+  for (const k of keys) {
+    if (k <= monthKey) chosen = k; else break;
+  }
+  if (chosen) return state.monthSettings[chosen];
+  const d = cloneDefaults();
+  return { income: d.income, commitments: d.commitments };
+}
+
 // ---------- الحسابات (نفس منطق الشيت) ----------
 function computeStats() {
-  const income = state.income.salary + state.income.spouseSalary + state.income.extra;
-  const commitmentsTotal = state.commitments.reduce((s, c) => s + Number(c.amount || 0), 0);
-  const remainingAfterCommitments = income - commitmentsTotal;
-
   // --- حسابات "النهاردة" الحقيقية (مستقلة عن الشهر اللي بتتصفحيه) ---
   const today = todayISO();
   const realMonthKey = monthKeyOf(realNow.getFullYear(), realNow.getMonth());
+  const realSettings = getSettingsForMonth(realMonthKey);
+  const realIncome = realSettings.income.salary + realSettings.income.spouseSalary + realSettings.income.extra;
+  const realCommitmentsTotal = realSettings.commitments.reduce((s, c) => s + Number(c.amount || 0), 0);
+  const remainingAfterCommitmentsReal = realIncome - realCommitmentsTotal;
+
   const realMonthTx = getMonthTx(realMonthKey);
   const realExpensesTotal = realMonthTx.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const remainingAfterExpensesReal = remainingAfterCommitments - realExpensesTotal;
+  const remainingAfterExpensesReal = remainingAfterCommitmentsReal - realExpensesTotal;
 
   const totalDaysInMonth = daysInMonth(realNow.getFullYear(), realNow.getMonth());
   const dayOfMonth = realNow.getDate();
@@ -120,8 +145,13 @@ function computeStats() {
   const todayTx = state.transactions.filter(t => t.date === today);
   const spentToday = todayTx.reduce((s, t) => s + Number(t.amount || 0), 0);
 
-  // --- حسابات الشهر اللي بتتصفحيه (ممكن يكون نفس الشهر الحالي أو شهر تاني) ---
+  // --- حسابات الشهر اللي بتتصفحيه (له دخل والتزامات مستقلة تمامًا) ---
   const viewMonthKey = monthKeyOf(viewYear, viewMonthIndex);
+  const viewSettings = getSettingsForMonth(viewMonthKey);
+  const income = viewSettings.income.salary + viewSettings.income.spouseSalary + viewSettings.income.extra;
+  const commitmentsTotal = viewSettings.commitments.reduce((s, c) => s + Number(c.amount || 0), 0);
+  const remainingAfterCommitments = income - commitmentsTotal;
+
   const viewMonthTx = getMonthTx(viewMonthKey);
   const expensesTotal = viewMonthTx.reduce((s, t) => s + Number(t.amount || 0), 0);
   const remainingAfterExpenses = remainingAfterCommitments - expensesTotal;
@@ -135,7 +165,7 @@ function computeStats() {
     income, commitmentsTotal, expensesTotal,
     remainingAfterCommitments, remainingAfterExpenses,
     allowedPerDay, spentToday, daysRemaining, byCategory,
-    viewMonthTx,
+    viewMonthTx, viewSettings,
   };
 }
 
@@ -183,7 +213,7 @@ function renderDashboard() {
   document.getElementById('statRemaining').textContent = fmt(s.remainingAfterExpenses) + ' ج.م';
   document.getElementById('statToday').textContent = fmt(s.spentToday) + ' ج.م';
 
-  renderTxList(document.getElementById('recentTxList'), [...state.transactions]
+  renderTxList(document.getElementById('recentTxList'), [...s.viewMonthTx]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
     .slice(0, 5));
 }
@@ -365,13 +395,13 @@ function openDetailSheet(kind) {
 
   if (kind === 'income') {
     title = 'تفاصيل الدخل';
-    body = detailRow('مرتب', state.income.salary)
-      + detailRow('مرتب الزوج', state.income.spouseSalary)
-      + detailRow('دخل إضافي', state.income.extra)
+    body = detailRow('مرتب', s.viewSettings.income.salary)
+      + detailRow('مرتب الزوج', s.viewSettings.income.spouseSalary)
+      + detailRow('دخل إضافي', s.viewSettings.income.extra)
       + detailRow('الإجمالي', s.income, true);
   } else if (kind === 'commitments') {
     title = 'تفاصيل الالتزامات الثابتة';
-    body = state.commitments.map(c => detailRow(c.name, c.amount)).join('')
+    body = s.viewSettings.commitments.map(c => detailRow(c.name, c.amount)).join('')
       + detailRow('الإجمالي', s.commitmentsTotal, true);
   } else if (kind === 'expenses') {
     title = 'مصروفات الشهر حسب التصنيف';
@@ -416,13 +446,23 @@ detailBackdrop.addEventListener('click', (e) => {
 });
 
 // ---------- شاشة الإعدادات ----------
+let settingsSnapshot = null; // الإعدادات الفعّالة اللي بتتعرض دلوقتي (تُستخدم وقت الحفظ)
+
 function renderSettings() {
-  document.getElementById('setSalary').value = state.income.salary;
-  document.getElementById('setSpouseSalary').value = state.income.spouseSalary;
-  document.getElementById('setExtraIncome').value = state.income.extra;
+  const monthKey = monthKeyOf(viewYear, viewMonthIndex);
+  const effective = getSettingsForMonth(monthKey);
+  settingsSnapshot = effective;
+
+  const monthDate = new Date(viewYear, viewMonthIndex, 1);
+  const monthName = monthDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+  document.getElementById('settingsMonthLabel').textContent = `(شهر ${monthName})`;
+
+  document.getElementById('setSalary').value = effective.income.salary;
+  document.getElementById('setSpouseSalary').value = effective.income.spouseSalary;
+  document.getElementById('setExtraIncome').value = effective.income.extra;
 
   const container = document.getElementById('commitmentsFields');
-  container.innerHTML = state.commitments.map((c, i) => `
+  container.innerHTML = effective.commitments.map((c, i) => `
     <label class="field">
       <span>${c.name}</span>
       <input type="number" inputmode="decimal" min="0" step="1" data-idx="${i}" class="commitmentInput" value="${c.amount}">
@@ -431,18 +471,24 @@ function renderSettings() {
 }
 
 document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+  const monthKey = monthKeyOf(viewYear, viewMonthIndex);
   const salary = Number(document.getElementById('setSalary').value) || 0;
   const spouseSalary = Number(document.getElementById('setSpouseSalary').value) || 0;
   const extra = Number(document.getElementById('setExtraIncome').value) || 0;
-  state.income = { salary, spouseSalary, extra };
 
-  document.querySelectorAll('.commitmentInput').forEach(input => {
-    const idx = Number(input.dataset.idx);
-    state.commitments[idx].amount = Number(input.value) || 0;
+  const baseCommitments = settingsSnapshot ? settingsSnapshot.commitments : [];
+  const newCommitments = baseCommitments.map((c, i) => {
+    const input = document.querySelector(`.commitmentInput[data-idx="${i}"]`);
+    return { name: c.name, amount: input ? (Number(input.value) || 0) : c.amount };
   });
 
+  state.monthSettings[monthKey] = {
+    income: { salary, spouseSalary, extra },
+    commitments: newCommitments,
+  };
+
   saveData();
-  alert('تم حفظ التعديلات ✅');
+  alert('تم حفظ التعديلات لهذا الشهر ✅');
   switchView('view-dashboard');
 });
 
