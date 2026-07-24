@@ -1,36 +1,204 @@
-ميزانيتي
-تقدرِ تصرفي النهاردة 0 جنيه
-‹ ›
-💰 إجمالي الدخل 0
-🏠 الالتزامات 0
-🧾 مصروفات الشهر 0
-✅ المتبقي 0
-📅 مصروف اليوم 0
-آخر الحركات
-عرض الكل
-كل الحركات
-🧾
-لسه مفيش حركات مسجّلة
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ميزانيتي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#146356">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ميزانيتي">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-دوسي على زرار + عشان تضيفي أول مصروف
+<header class="topbar">
+  <span class="topbar-title">ميزانيتي</span>
+  <span class="topbar-date" id="todayLabel"></span>
+</header>
 
-الدخل الشهري
-مرتب 
- مرتب الزوج 
- دخل إضافي 
-الالتزامات الثابتة
-حفظ التغييرات
-+
-🏡 الرئيسية 📋 الحركات ⚙️ الإعدادات
-إضافة مصروف
-التاريخ 
- 
- البيان 
-مثال: شراء خضار
- التصنيف 
- المبلغ 
-0
- طريقة الدفع 
-حذف إلغاء حفظ
-التفاصيل
-إغلاق
+<main id="app">
+
+  <!-- ============ شاشة الرئيسية ============ -->
+  <section class="view" id="view-dashboard">
+
+    <div class="hero" id="heroCard">
+      <svg class="hero-ring" viewBox="0 0 200 200">
+        <circle class="ring-track" cx="100" cy="100" r="86"></circle>
+        <circle class="ring-progress" id="ringProgress" cx="100" cy="100" r="86"></circle>
+      </svg>
+      <div class="hero-content">
+        <span class="hero-label">تقدرِ تصرفي النهاردة</span>
+        <span class="hero-number" id="heroAmount">0</span>
+        <span class="hero-unit">جنيه</span>
+        <span class="hero-sub" id="heroSub"></span>
+      </div>
+    </div>
+
+    <div class="month-nav">
+      <button class="month-arrow" id="prevMonthBtn" aria-label="الشهر السابق">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button class="month-arrow" id="nextMonthBtn" aria-label="الشهر التالي">›</button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card" data-detail="income">
+        <span class="stat-icon">💰</span>
+        <span class="stat-label">إجمالي الدخل</span>
+        <span class="stat-value" id="statIncome">0</span>
+      </div>
+      <div class="stat-card" data-detail="commitments">
+        <span class="stat-icon">🏠</span>
+        <span class="stat-label">الالتزامات</span>
+        <span class="stat-value" id="statCommitments">0</span>
+      </div>
+      <div class="stat-card" data-detail="expenses">
+        <span class="stat-icon">🧾</span>
+        <span class="stat-label">مصروفات الشهر</span>
+        <span class="stat-value" id="statExpenses">0</span>
+      </div>
+      <div class="stat-card" data-detail="remaining">
+        <span class="stat-icon">✅</span>
+        <span class="stat-label">المتبقي</span>
+        <span class="stat-value" id="statRemaining">0</span>
+      </div>
+      <div class="stat-card" data-detail="today">
+        <span class="stat-icon">📅</span>
+        <span class="stat-label">مصروف اليوم</span>
+        <span class="stat-value" id="statToday">0</span>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-head">
+        <h2>آخر الحركات</h2>
+        <button class="link-btn" id="goToTransactions">عرض الكل</button>
+      </div>
+      <div class="tx-list" id="recentTxList"></div>
+    </div>
+
+  </section>
+
+  <!-- ============ شاشة الحركات ============ -->
+  <section class="view hidden" id="view-transactions">
+    <div class="section-head sticky-head">
+      <h2>كل الحركات</h2>
+    </div>
+    <div class="tx-list" id="allTxList"></div>
+    <div class="empty-state hidden" id="txEmptyState">
+      <span class="empty-icon">🧾</span>
+      <p>لسه مفيش حركات مسجّلة</p>
+      <p class="empty-sub">دوسي على زرار + عشان تضيفي أول مصروف</p>
+    </div>
+  </section>
+
+  <!-- ============ شاشة الإعدادات ============ -->
+  <section class="view hidden" id="view-settings">
+    <div class="section-head sticky-head">
+      <h2>الدخل الشهري</h2>
+    </div>
+    <div class="settings-card">
+      <label class="field">
+        <span>مرتب</span>
+        <input type="number" id="setSalary" inputmode="decimal" min="0" step="1">
+      </label>
+      <label class="field">
+        <span>مرتب الزوج</span>
+        <input type="number" id="setSpouseSalary" inputmode="decimal" min="0" step="1">
+      </label>
+      <label class="field">
+        <span>دخل إضافي</span>
+        <input type="number" id="setExtraIncome" inputmode="decimal" min="0" step="1">
+      </label>
+    </div>
+
+    <div class="section-head">
+      <h2>الالتزامات الثابتة</h2>
+    </div>
+    <div class="settings-card" id="commitmentsFields"></div>
+
+    <button class="btn-primary settings-save" id="saveSettingsBtn">حفظ التغييرات</button>
+  </section>
+
+</main>
+
+<button class="fab" id="addTxBtn" aria-label="إضافة مصروف">+</button>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="view-dashboard">
+    <span class="nav-icon">🏡</span>
+    <span>الرئيسية</span>
+  </button>
+  <button class="nav-btn" data-view="view-transactions">
+    <span class="nav-icon">📋</span>
+    <span>الحركات</span>
+  </button>
+  <button class="nav-btn" data-view="view-settings">
+    <span class="nav-icon">⚙️</span>
+    <span>الإعدادات</span>
+  </button>
+</nav>
+
+<!-- ============ نافذة إضافة / تعديل حركة ============ -->
+<div class="sheet-backdrop hidden" id="sheetBackdrop">
+  <div class="sheet" id="txSheet">
+    <div class="sheet-handle"></div>
+    <h3 id="sheetTitle">إضافة مصروف</h3>
+
+    <form id="txForm">
+      <input type="hidden" id="txId">
+
+      <label class="field">
+        <span>التاريخ</span>
+        <input type="date" id="txDate" required>
+      </label>
+
+      <label class="field">
+        <span>البيان</span>
+        <input type="text" id="txDesc" placeholder="مثال: شراء خضار" required>
+      </label>
+
+      <label class="field">
+        <span>التصنيف</span>
+        <select id="txCategory" required></select>
+      </label>
+
+      <label class="field">
+        <span>المبلغ</span>
+        <input type="number" id="txAmount" inputmode="decimal" min="0" step="0.01" placeholder="0" required>
+      </label>
+
+      <label class="field">
+        <span>طريقة الدفع</span>
+        <select id="txPayment" required></select>
+      </label>
+
+      <div class="sheet-actions">
+        <button type="button" class="btn-ghost hidden" id="deleteTxBtn">حذف</button>
+        <button type="button" class="btn-outline" id="cancelTxBtn">إلغاء</button>
+        <button type="button" class="btn-primary" id="saveTxBtn">حفظ</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ نافذة تفاصيل البطاقة ============ -->
+<div class="sheet-backdrop hidden" id="detailBackdrop">
+  <div class="sheet" id="detailSheet">
+    <div class="sheet-handle"></div>
+    <h3 id="detailTitle">التفاصيل</h3>
+    <div id="detailBody"></div>
+    <button type="button" class="btn-outline detail-close" id="closeDetailBtn">إغلاق</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
