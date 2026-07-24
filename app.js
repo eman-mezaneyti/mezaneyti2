@@ -161,11 +161,13 @@ function computeStats() {
     byCategory[t.category] = (byCategory[t.category] || 0) + Number(t.amount || 0);
   });
 
+  const isCurrentMonth = (viewYear === realNow.getFullYear() && viewMonthIndex === realNow.getMonth());
+
   return {
     income, commitmentsTotal, expensesTotal,
     remainingAfterCommitments, remainingAfterExpenses,
     allowedPerDay, spentToday, daysRemaining, byCategory,
-    viewMonthTx, viewSettings,
+    viewMonthTx, viewSettings, isCurrentMonth,
   };
 }
 
@@ -211,7 +213,14 @@ function renderDashboard() {
   document.getElementById('statCommitments').textContent = fmt(s.commitmentsTotal) + ' ج.م';
   document.getElementById('statExpenses').textContent = fmt(s.expensesTotal) + ' ج.م';
   document.getElementById('statRemaining').textContent = fmt(s.remainingAfterExpenses) + ' ج.م';
-  document.getElementById('statToday').textContent = fmt(s.spentToday) + ' ج.م';
+  const todayCard = document.querySelector('.stat-card[data-detail="today"]');
+  if (s.isCurrentMonth) {
+    document.getElementById('statToday').textContent = fmt(s.spentToday) + ' ج.م';
+    todayCard.classList.remove('disabled-card');
+  } else {
+    document.getElementById('statToday').textContent = '—';
+    todayCard.classList.add('disabled-card');
+  }
 
   renderTxList(document.getElementById('recentTxList'), [...s.viewMonthTx]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
@@ -422,13 +431,17 @@ function openDetailSheet(kind) {
       + detailRow('المتبقي', s.remainingAfterExpenses, true);
   } else if (kind === 'today') {
     title = 'مصروفات النهاردة';
-    const today = todayISO();
-    const todayTx = state.transactions.filter(t => t.date === today);
-    if (todayTx.length === 0) {
-      body = '<p class="detail-empty">لسه معملتيش أي مصروف النهاردة</p>';
+    if (!s.isCurrentMonth) {
+      body = '<p class="detail-empty">"مصروف اليوم" بيوري إنفاق النهاردة الفعلي بس، فمش بيتغيّر مع تصفح شهور تانية. ارجعي للشهر الحالي عشان تشوفيه.</p>';
     } else {
-      body = todayTx.map(t => detailRow(`${categoryIcon(t.category)} ${t.desc}`, t.amount)).join('')
-        + detailRow('الإجمالي', s.spentToday, true);
+      const today = todayISO();
+      const todayTx = state.transactions.filter(t => t.date === today);
+      if (todayTx.length === 0) {
+        body = '<p class="detail-empty">لسه معملتيش أي مصروف النهاردة</p>';
+      } else {
+        body = todayTx.map(t => detailRow(`${categoryIcon(t.category)} ${t.desc}`, t.amount)).join('')
+          + detailRow('الإجمالي', s.spentToday, true);
+      }
     }
   }
 
