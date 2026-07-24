@@ -381,6 +381,11 @@ button, input, select {
   box-shadow: var(--shadow);
 }
 .settings-card .field:last-child { margin-bottom: 0; }
+.settings-month {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
 .settings-save {
   width: 100%;
   margin-bottom: 20px;
