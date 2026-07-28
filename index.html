@@ -29,23 +29,10 @@
   <!-- ============ شاشة الرئيسية ============ -->
   <section class="view" id="view-dashboard">
 
-    <div class="hero" id="heroCard">
-      <svg class="hero-ring" viewBox="0 0 200 200">
-        <circle class="ring-track" cx="100" cy="100" r="86"></circle>
-        <circle class="ring-progress" id="ringProgress" cx="100" cy="100" r="86"></circle>
-      </svg>
-      <div class="hero-content">
-        <span class="hero-label">تقدرِ تصرفي النهاردة</span>
-        <span class="hero-number" id="heroAmount">0</span>
-        <span class="hero-unit">جنيه</span>
-        <span class="hero-sub" id="heroSub"></span>
-      </div>
-    </div>
-
     <div class="month-nav">
-      <button class="month-arrow" id="prevMonthBtn" aria-label="الشهر السابق">‹</button>
+      <button class="month-arrow" id="prevMonthBtn" aria-label="الدورة السابقة">‹</button>
       <span class="month-label" id="monthLabel"></span>
-      <button class="month-arrow" id="nextMonthBtn" aria-label="الشهر التالي">›</button>
+      <button class="month-arrow" id="nextMonthBtn" aria-label="الدورة التالية">›</button>
     </div>
 
     <div class="stats-grid">
@@ -61,7 +48,7 @@
       </div>
       <div class="stat-card" data-detail="expenses">
         <span class="stat-icon">🧾</span>
-        <span class="stat-label">مصروفات الشهر</span>
+        <span class="stat-label">المنصرف حتى اليوم</span>
         <span class="stat-value" id="statExpenses">0</span>
       </div>
       <div class="stat-card" data-detail="remaining">
@@ -69,10 +56,21 @@
         <span class="stat-label">المتبقي</span>
         <span class="stat-value" id="statRemaining">0</span>
       </div>
-      <div class="stat-card" data-detail="today">
+    </div>
+
+    <div class="section-block">
+      <div class="section-head">
+        <h2>مصروف يوم بعينه</h2>
+      </div>
+      <div class="month-nav">
+        <button class="month-arrow" id="prevDayBtn" aria-label="اليوم السابق">‹</button>
+        <span class="month-label" id="dayLabel"></span>
+        <button class="month-arrow" id="nextDayBtn" aria-label="اليوم التالي">›</button>
+      </div>
+      <div class="stat-card day-expense-card" id="dayExpenseCard" data-detail="day">
         <span class="stat-icon">📅</span>
-        <span class="stat-label">مصروف اليوم</span>
-        <span class="stat-value" id="statToday">0</span>
+        <span class="stat-label">إجمالي مصروف اليوم ده</span>
+        <span class="stat-value" id="statDayExpense">0</span>
       </div>
     </div>
 
@@ -89,7 +87,7 @@
   <!-- ============ شاشة الحركات ============ -->
   <section class="view hidden" id="view-transactions">
     <div class="section-head sticky-head">
-      <h2>كل الحركات</h2>
+      <h2>كل الحركات <span id="txMonthLabel" class="settings-month"></span></h2>
     </div>
     <div class="tx-list" id="allTxList"></div>
     <div class="empty-state hidden" id="txEmptyState">
@@ -127,6 +125,16 @@
     <button class="btn-primary settings-save" id="saveSettingsBtn">حفظ التغييرات</button>
   </section>
 
+  <!-- ============ شاشة التدوين ============ -->
+  <section class="view hidden" id="view-notes">
+    <div class="section-head sticky-head">
+      <h2>تدوين اقتراحات الشراء</h2>
+    </div>
+    <p class="notes-hint">دوّني هنا أي حاجة ناوية تشتريها أو بنود وأصناف عايزة متنسيهاش.</p>
+    <textarea id="notesArea" class="notes-textarea" placeholder="مثال:&#10;- زيت طعام&#10;- كشك أحمد الجديد&#10;- هدية عيد ميلاد تاليا"></textarea>
+    <button class="btn-primary settings-save" id="saveNotesBtn">حفظ التدوين</button>
+  </section>
+
 </main>
 
 <button class="fab" id="addTxBtn" aria-label="إضافة مصروف">+</button>
@@ -143,6 +151,10 @@
   <button class="nav-btn" data-view="view-settings">
     <span class="nav-icon">⚙️</span>
     <span>الإعدادات</span>
+  </button>
+  <button class="nav-btn" data-view="view-notes">
+    <span class="nav-icon">📝</span>
+    <span>تدوين</span>
   </button>
 </nav>
 
@@ -201,4 +213,4 @@
 
 <script src="app.js"></script>
 </body>
-  </html>
+</html>
