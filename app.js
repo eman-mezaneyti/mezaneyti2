@@ -39,6 +39,8 @@ const DEFAULT_DATA = {
   transactions: [],
   // إعدادات كل شهر (دخل + التزامات) بشكل مستقل، مفتاحها "YYYY-MM"
   monthSettings: {},
+  // تدوين حر لاقتراحات الشراء
+  notes: '',
 };
 
 // ---------- تحميل / حفظ البيانات ----------
@@ -63,6 +65,9 @@ function loadData() {
         [currentKey]: { income: parsed.income, commitments: parsed.commitments },
       };
     }
+    if (typeof parsed.notes !== 'string') {
+      parsed.notes = '';
+    }
     return parsed;
   } catch (e) {
     alert('مشكلة في تحميل البيانات المحفوظة، هيتم البدء ببيانات افتراضية:\n' + e.message);
@@ -81,31 +86,56 @@ function saveData() {
 let state = loadData();
 
 // ---------- أدوات التاريخ ----------
+function isoDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function todayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return isoDateStr(new Date());
 }
-
-function daysInMonth(year, monthIndex0) {
-  return new Date(year, monthIndex0 + 1, 0).getDate();
-}
-
-function isSameMonth(dateStr, ref) {
-  return dateStr.slice(0, 7) === ref.slice(0, 7);
-}
-
-// ---------- حالة الشهر المعروض (للتنقل بين الشهور) ----------
-const realNow = new Date();
-let viewYear = realNow.getFullYear();
-let viewMonthIndex = realNow.getMonth(); // 0-based
 
 function monthKeyOf(year, monthIndex0) {
   return `${year}-${String(monthIndex0 + 1).padStart(2, '0')}`;
 }
 
-function getMonthTx(monthKey) {
-  return state.transactions.filter(t => t.date.slice(0, 7) === monthKey);
+// دورة الميزانية مش شهر تقويمي: بتبدأ يوم 27 وتنتهي يوم 26 من الشهر اللي بعده.
+// الدورة بتتحدد باسم شهر بدايتها (يوم الـ27).
+function cycleBounds(year, monthIndex0) {
+  const start = new Date(year, monthIndex0, 27);
+  const end = new Date(year, monthIndex0 + 1, 26);
+  return { startISO: isoDateStr(start), endISO: isoDateStr(end) };
 }
+
+function cycleKeyFromDate(date) {
+  let y = date.getFullYear();
+  let m = date.getMonth();
+  if (date.getDate() < 27) {
+    m -= 1;
+    if (m < 0) { m = 11; y -= 1; }
+  }
+  return { year: y, monthIndex0: m, key: monthKeyOf(y, m) };
+}
+
+function getCycleTx(year, monthIndex0) {
+  const { startISO, endISO } = cycleBounds(year, monthIndex0);
+  return state.transactions.filter(t => t.date >= startISO && t.date <= endISO);
+}
+
+function cycleLabelText(year, monthIndex0) {
+  const startDate = new Date(year, monthIndex0, 27);
+  const endDate = new Date(year, monthIndex0 + 1, 26);
+  const opts = { day: 'numeric', month: 'long' };
+  return `${startDate.toLocaleDateString('ar-EG', opts)} – ${endDate.toLocaleDateString('ar-EG', opts)}`;
+}
+
+// ---------- حالة الدورة المعروضة (للتنقل بين الدورات) ----------
+const realNow = new Date();
+const realCycle = cycleKeyFromDate(realNow);
+let viewYear = realCycle.year;
+let viewMonthIndex = realCycle.monthIndex0; // شهر بداية الدورة (0-based)
+
+// ---------- حالة اليوم المعروض (للتنقل بين الأيام) ----------
+let viewDate = new Date(realNow.getFullYear(), realNow.getMonth(), realNow.getDate());
 
 // إعدادات الدخل/الالتزامات الخاصة بشهر معيّن.
 // لو الشهر ده معملوش له تعديل صريح، بترجع آخر إعدادات محفوظة لأقرب شهر سابق (استمرارية طبيعية)،
@@ -123,36 +153,13 @@ function getSettingsForMonth(monthKey) {
 
 // ---------- الحسابات (نفس منطق الشيت) ----------
 function computeStats() {
-  // --- حسابات "النهاردة" الحقيقية (مستقلة عن الشهر اللي بتتصفحيه) ---
-  const today = todayISO();
-  const realMonthKey = monthKeyOf(realNow.getFullYear(), realNow.getMonth());
-  const realSettings = getSettingsForMonth(realMonthKey);
-  const realIncome = realSettings.income.salary + realSettings.income.spouseSalary + realSettings.income.extra;
-  const realCommitmentsTotal = realSettings.commitments.reduce((s, c) => s + Number(c.amount || 0), 0);
-  const remainingAfterCommitmentsReal = realIncome - realCommitmentsTotal;
-
-  const realMonthTx = getMonthTx(realMonthKey);
-  const realExpensesTotal = realMonthTx.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const remainingAfterExpensesReal = remainingAfterCommitmentsReal - realExpensesTotal;
-
-  const totalDaysInMonth = daysInMonth(realNow.getFullYear(), realNow.getMonth());
-  const dayOfMonth = realNow.getDate();
-  const daysRemaining = totalDaysInMonth - dayOfMonth + 1; // شامل اليوم النهارده
-
-  // المسموح به يوميًا = المتبقي بعد الالتزامات ومصروفات الشهر الحالي ÷ الأيام المتبقية في الشهر
-  const allowedPerDay = daysRemaining > 0 ? remainingAfterExpensesReal / daysRemaining : 0;
-
-  const todayTx = state.transactions.filter(t => t.date === today);
-  const spentToday = todayTx.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-  // --- حسابات الشهر اللي بتتصفحيه (له دخل والتزامات مستقلة تمامًا) ---
   const viewMonthKey = monthKeyOf(viewYear, viewMonthIndex);
   const viewSettings = getSettingsForMonth(viewMonthKey);
   const income = viewSettings.income.salary + viewSettings.income.spouseSalary + viewSettings.income.extra;
   const commitmentsTotal = viewSettings.commitments.reduce((s, c) => s + Number(c.amount || 0), 0);
   const remainingAfterCommitments = income - commitmentsTotal;
 
-  const viewMonthTx = getMonthTx(viewMonthKey);
+  const viewMonthTx = getCycleTx(viewYear, viewMonthIndex);
   const expensesTotal = viewMonthTx.reduce((s, t) => s + Number(t.amount || 0), 0);
   const remainingAfterExpenses = remainingAfterCommitments - expensesTotal;
 
@@ -161,13 +168,10 @@ function computeStats() {
     byCategory[t.category] = (byCategory[t.category] || 0) + Number(t.amount || 0);
   });
 
-  const isCurrentMonth = (viewYear === realNow.getFullYear() && viewMonthIndex === realNow.getMonth());
-
   return {
     income, commitmentsTotal, expensesTotal,
     remainingAfterCommitments, remainingAfterExpenses,
-    allowedPerDay, spentToday, daysRemaining, byCategory,
-    viewMonthTx, viewSettings, isCurrentMonth,
+    byCategory, viewMonthTx, viewSettings,
   };
 }
 
@@ -184,47 +188,29 @@ function renderDashboard() {
     weekday: 'long', day: 'numeric', month: 'long',
   });
 
-  const monthDate = new Date(viewYear, viewMonthIndex, 1);
-  document.getElementById('monthLabel').textContent = monthDate.toLocaleDateString('ar-EG', {
-    year: 'numeric', month: 'long',
-  });
-
-  const heroValue = s.allowedPerDay - s.spentToday;
-
-  document.getElementById('heroAmount').textContent = fmt(heroValue);
-  document.getElementById('heroSub').textContent =
-    `من أصل ${fmt(s.allowedPerDay)} ج.م المسموح بيه النهاردة، صرفتِ ${fmt(s.spentToday)} ج.م`;
-
-  const ring = document.getElementById('ringProgress');
-  const circumference = 540; // 2 * PI * 86
-  let pct = s.allowedPerDay > 0 ? s.spentToday / s.allowedPerDay : (s.spentToday > 0 ? 1 : 0);
-  pct = Math.min(Math.max(pct, 0), 1);
-  ring.style.strokeDashoffset = circumference - (circumference * pct);
-
-  if (heroValue < 0) {
-    ring.style.stroke = 'var(--brick)';
-  } else if (pct > 0.75) {
-    ring.style.stroke = 'var(--amber)';
-  } else {
-    ring.style.stroke = 'var(--teal)';
-  }
+  document.getElementById('monthLabel').textContent = cycleLabelText(viewYear, viewMonthIndex);
 
   document.getElementById('statIncome').textContent = fmt(s.income) + ' ج.م';
   document.getElementById('statCommitments').textContent = fmt(s.commitmentsTotal) + ' ج.م';
   document.getElementById('statExpenses').textContent = fmt(s.expensesTotal) + ' ج.م';
   document.getElementById('statRemaining').textContent = fmt(s.remainingAfterExpenses) + ' ج.م';
-  const todayCard = document.querySelector('.stat-card[data-detail="today"]');
-  if (s.isCurrentMonth) {
-    document.getElementById('statToday').textContent = fmt(s.spentToday) + ' ج.م';
-    todayCard.classList.remove('disabled-card');
-  } else {
-    document.getElementById('statToday').textContent = '—';
-    todayCard.classList.add('disabled-card');
-  }
+
+  renderDaySection();
 
   renderTxList(document.getElementById('recentTxList'), [...s.viewMonthTx]
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
     .slice(0, 5));
+}
+
+// ---------- عرض قسم "مصروف يوم بعينه" ----------
+function renderDaySection() {
+  document.getElementById('dayLabel').textContent = viewDate.toLocaleDateString('ar-EG', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+  const dateStr = isoDateStr(viewDate);
+  const dayTx = state.transactions.filter(t => t.date === dateStr);
+  const dayTotal = dayTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+  document.getElementById('statDayExpense').textContent = fmt(dayTotal) + ' ج.م';
 }
 
 // ---------- عرض قوائم الحركات ----------
@@ -256,7 +242,9 @@ function renderTxList(container, list) {
 }
 
 function renderAllTransactions() {
-  const sorted = [...state.transactions].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  document.getElementById('txMonthLabel').textContent = `(${cycleLabelText(viewYear, viewMonthIndex)})`;
+  const cycleTx = getCycleTx(viewYear, viewMonthIndex);
+  const sorted = [...cycleTx].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   const listEl = document.getElementById('allTxList');
   const emptyEl = document.getElementById('txEmptyState');
   if (sorted.length === 0) {
@@ -284,6 +272,7 @@ function switchView(viewId) {
   if (viewId === 'view-transactions') renderAllTransactions();
   if (viewId === 'view-dashboard') renderDashboard();
   if (viewId === 'view-settings') renderSettings();
+  if (viewId === 'view-notes') renderNotes();
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -300,6 +289,15 @@ document.getElementById('nextMonthBtn').addEventListener('click', () => {
   viewMonthIndex++;
   if (viewMonthIndex > 11) { viewMonthIndex = 0; viewYear++; }
   renderDashboard();
+});
+
+document.getElementById('prevDayBtn').addEventListener('click', () => {
+  viewDate.setDate(viewDate.getDate() - 1);
+  renderDaySection();
+});
+document.getElementById('nextDayBtn').addEventListener('click', () => {
+  viewDate.setDate(viewDate.getDate() + 1);
+  renderDaySection();
 });
 
 // ---------- نافذة إضافة / تعديل حركة ----------
@@ -413,7 +411,7 @@ function openDetailSheet(kind) {
     body = s.viewSettings.commitments.map(c => detailRow(c.name, c.amount)).join('')
       + detailRow('الإجمالي', s.commitmentsTotal, true);
   } else if (kind === 'expenses') {
-    title = 'مصروفات الشهر حسب التصنيف';
+    title = 'المنصرف حتى اليوم حسب التصنيف';
     const entries = Object.entries(s.byCategory);
     if (entries.length === 0) {
       body = '<p class="detail-empty">لسه مفيش مصروفات في الشهر ده</p>';
@@ -427,21 +425,18 @@ function openDetailSheet(kind) {
     title = 'كيف حُسب المتبقي';
     body = detailRow('إجمالي الدخل', s.income)
       + detailRow('الالتزامات الثابتة', -s.commitmentsTotal)
-      + detailRow('مصروفات الشهر', -s.expensesTotal)
+      + detailRow('المنصرف حتى اليوم', -s.expensesTotal)
       + detailRow('المتبقي', s.remainingAfterExpenses, true);
-  } else if (kind === 'today') {
-    title = 'مصروفات النهاردة';
-    if (!s.isCurrentMonth) {
-      body = '<p class="detail-empty">"مصروف اليوم" بيوري إنفاق النهاردة الفعلي بس، فمش بيتغيّر مع تصفح شهور تانية. ارجعي للشهر الحالي عشان تشوفيه.</p>';
+  } else if (kind === 'day') {
+    const dateStr = isoDateStr(viewDate);
+    title = 'مصروفات ' + viewDate.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+    const dayTx = state.transactions.filter(t => t.date === dateStr);
+    if (dayTx.length === 0) {
+      body = '<p class="detail-empty">مفيش مصروفات في اليوم ده</p>';
     } else {
-      const today = todayISO();
-      const todayTx = state.transactions.filter(t => t.date === today);
-      if (todayTx.length === 0) {
-        body = '<p class="detail-empty">لسه معملتيش أي مصروف النهاردة</p>';
-      } else {
-        body = todayTx.map(t => detailRow(`${categoryIcon(t.category)} ${t.desc}`, t.amount)).join('')
-          + detailRow('الإجمالي', s.spentToday, true);
-      }
+      const dayTotal = dayTx.reduce((s2, t) => s2 + Number(t.amount || 0), 0);
+      body = dayTx.map(t => detailRow(`${categoryIcon(t.category)} ${t.desc}`, t.amount)).join('')
+        + detailRow('الإجمالي', dayTotal, true);
     }
   }
 
@@ -503,6 +498,17 @@ document.getElementById('saveSettingsBtn').addEventListener('click', () => {
   saveData();
   alert('تم حفظ التعديلات لهذا الشهر ✅');
   switchView('view-dashboard');
+});
+
+// ---------- شاشة التدوين ----------
+function renderNotes() {
+  document.getElementById('notesArea').value = state.notes || '';
+}
+
+document.getElementById('saveNotesBtn').addEventListener('click', () => {
+  state.notes = document.getElementById('notesArea').value;
+  saveData();
+  alert('تم حفظ التدوين ✅');
 });
 
 // ---------- تسجيل Service Worker (للعمل بدون إنترنت) ----------
